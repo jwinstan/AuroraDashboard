@@ -73,6 +73,16 @@ def main() -> int:
         index.unlink()
     hifi.rename(index)
 
+    # Mark this build as a static (no-backend) deploy. Client-side code checks
+    # for this meta tag before trying to use the --serve proxy; without it,
+    # loading the built site from 127.0.0.1 (for local testing) would hit a
+    # non-existent /proxy and fail on SDO images, etc.
+    text = index.read_text(encoding="utf-8")
+    marker = '<meta name="aurora-static-deploy" content="true">'
+    if marker not in text:
+        text = text.replace("<head>", f"<head>\n  {marker}", 1)
+        index.write_text(text, encoding="utf-8")
+
     places_cfg = P.load()
     grid_dir = BUILD / "grid"
     grid_dir.mkdir(exist_ok=True)

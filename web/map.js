@@ -33,6 +33,7 @@ const statsEl = document.getElementById("map-stats");
 const LAYER_IDX = { tot: 0, low: 1, mid: 2, high: 3 };
 const LAYER_LABEL = {
   aurora: "Aurora chance",
+  auroraClear: "Aurora chance (clear-sky)",
   tot: "Total cloud", low: "Low cloud (blocks sky)", mid: "Mid cloud", high: "High cloud (thin)",
 };
 // `H` (one hour in ms) is declared in app.js; in the pro bundle both files are
@@ -264,7 +265,8 @@ async function render() {
     path(active);
     ctx.clip();
   }
-  const isAurora = mapState.layer === "aurora";
+  const isAurora = mapState.layer === "aurora" || mapState.layer === "auroraClear";
+  const ignoreClouds = mapState.layer === "auroraClear";
   const idx = LAYER_IDX[mapState.layer] ?? 1;
   const vals = [];
   const proj = mapState.proj;
@@ -273,6 +275,10 @@ async function render() {
 
   // Build a small bitmap, one pixel per grid cell. Browser bilinear filtering
   // on the subsequent drawImage turns the mosaic into a smooth gradient.
+  // Only valid for cylindrical projections (Mercator) where constant-lat is a
+  // horizontal line on the canvas. For azimuthal projections (GL) constant-lat
+  // lines are curves, so the bitmap is drawn per-cell as a projected quad.
+  const useBitmap = mapState.cc !== "GL";
   const bbox = mapState.grid.bbox;  // [lat0, lon0, lat1, lon1]
   const latStep = mapState.grid.lat_step, lonStep = mapState.grid.lon_step;
   // `floor + 1` matches the Python grid generator, which stops before overshooting
@@ -292,12 +298,22 @@ async function render() {
     return [+m[1], +m[2], +m[3], Math.round((m[4] != null ? +m[4] : 1) * 255)];
   };
 
+  // For non-cylindrical projections (GL), draw cell quads to an offscreen full-
+  // size canvas so we can blur the result before compositing onto the main one,
+  // recovering the smooth look the Mercator bitmap path gets from bilinear
+  // upscaling. Without blur the azimuthal path shows a visible pixel grid.
+  const quadCtx = useBitmap ? null : (() => {
+    const o = document.createElement("canvas");
+    o.width = W; o.height = H;
+    return o.getContext("2d");
+  })();
+
   for (let i = 0; i < mapState.grid.cells.length; i++) {
     const c = mapState.grid.cells[i];
     const cloudsHere = c.clouds && c.clouds[h];
     let v, color;
     if (isAurora) {
-      v = auroraChanceAt(c.lat, c.lon, tMs, appData, cloudsHere);
+      v = auroraChanceAt(c.lat, c.lon, tMs, appData, ignoreClouds ? null : cloudsHere);
       if (v != null) vals.push(Math.round(v * 100));
       color = auroraColor(v);
     } else {
@@ -307,31 +323,64 @@ async function render() {
     }
     mapState.cellBounds.push([c.lat - half_lat, c.lon - half_lon, c.lat + half_lat, c.lon + half_lon]);
     if (!color) continue;
-    const col = Math.round((c.lon - bbox[1]) / lonStep);
-    // Image y grows southward, map lat grows northward -> flip.
-    const row = rows - 1 - Math.round((c.lat - bbox[0]) / latStep);
-    if (col < 0 || col >= cols || row < 0 || row >= rows) continue;
-    const pxIdx = (row * cols + col) * 4;
-    const [r, g, b, a] = rgba(color);
-    img.data[pxIdx] = r;
-    img.data[pxIdx + 1] = g;
-    img.data[pxIdx + 2] = b;
-    img.data[pxIdx + 3] = a;
+    if (useBitmap) {
+      const col = Math.round((c.lon - bbox[1]) / lonStep);
+      // Image y grows southward, map lat grows northward -> flip.
+      const row = rows - 1 - Math.round((c.lat - bbox[0]) / latStep);
+      if (col < 0 || col >= cols || row < 0 || row >= rows) continue;
+      const pxIdx = (row * cols + col) * 4;
+      const [r, g, b, a] = rgba(color);
+      img.data[pxIdx] = r;
+      img.data[pxIdx + 1] = g;
+      img.data[pxIdx + 2] = b;
+      img.data[pxIdx + 3] = a;
+    } else {
+      // Project each cell corner so the quad follows the curved grid lines.
+      const nw = proj([c.lon - half_lon, c.lat + half_lat]);
+      const ne = proj([c.lon + half_lon, c.lat + half_lat]);
+      const se = proj([c.lon + half_lon, c.lat - half_lat]);
+      const sw = proj([c.lon - half_lon, c.lat - half_lat]);
+      if (!nw || !ne || !se || !sw) continue;
+      quadCtx.fillStyle = color;
+      quadCtx.beginPath();
+      quadCtx.moveTo(nw[0], nw[1]);
+      quadCtx.lineTo(ne[0], ne[1]);
+      quadCtx.lineTo(se[0], se[1]);
+      quadCtx.lineTo(sw[0], sw[1]);
+      quadCtx.closePath();
+      quadCtx.fill();
+    }
   }
-  octx.putImageData(img, 0, 0);
-
-  // Draw the small bitmap over the map area. Align the rectangle to the actual
-  // cell-center extent (not the bbox corners) so the top/left pixels of the
-  // bitmap line up with the northernmost/westernmost cell centers.
-  const firstLat = bbox[0], firstLon = bbox[1];
-  const lastLat = firstLat + (rows - 1) * latStep;
-  const lastLon = firstLon + (cols - 1) * lonStep;
-  const nw = proj([firstLon, lastLat]);
-  const se = proj([lastLon, firstLat]);
-  if (nw && se) {
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(off, nw[0], nw[1], se[0] - nw[0], se[1] - nw[1]);
+  if (useBitmap) {
+    octx.putImageData(img, 0, 0);
+    // Align the rectangle to the actual cell-center extent (not the bbox
+    // corners) so the top/left pixels of the bitmap line up with the
+    // northernmost/westernmost cell centers.
+    const firstLat = bbox[0], firstLon = bbox[1];
+    const lastLat = firstLat + (rows - 1) * latStep;
+    const lastLon = firstLon + (cols - 1) * lonStep;
+    const nw = proj([firstLon, lastLat]);
+    const se = proj([lastLon, firstLat]);
+    if (nw && se) {
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(off, nw[0], nw[1], se[0] - nw[0], se[1] - nw[1]);
+    }
+  } else {
+    // Blur the quad mosaic as it composites onto the main (still-clipped) ctx,
+    // so neighbouring cells blend instead of showing a hard pixel grid. Scale
+    // the blur to the cell size on screen: estimate from two neighbour cell
+    // centres roughly a lon-step apart, then take ~35 % of that as the radius.
+    const c0 = mapState.grid.cells[0];
+    const c1 = mapState.grid.cells.find(c => c && c.lat === c0.lat && c.lon !== c0.lon) || c0;
+    const p0 = proj([c0.lon, c0.lat]);
+    const p1 = proj([c1.lon, c1.lat]);
+    const cellPx = p0 && p1 ? Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) : 30;
+    const blurPx = Math.max(4, Math.round(cellPx * 0.35));
+    const prevFilter = ctx.filter;
+    ctx.filter = `blur(${blurPx}px)`;
+    ctx.drawImage(quadCtx.canvas, 0, 0);
+    ctx.filter = prevFilter;
   }
   ctx.restore();
 
@@ -389,7 +438,9 @@ function updateWhen() {
 function fitCanvasToParent() {
   const parent = canvas.parentElement;
   const w = Math.max(320, parent.clientWidth);
-  const h = Math.round(w * (mapState.cc === "GL" ? 0.65 : 0.55));
+  // Greenland in azimuthal-equal-area is nearly square (bbox 59-84 N, 73-11 W
+  // projects taller than wide once centered); 0.65 crops the north coast.
+  const h = Math.round(w * (mapState.cc === "GL" ? 0.95 : 0.55));
   canvas.width = w;
   canvas.height = h;
 }

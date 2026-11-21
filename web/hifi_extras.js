@@ -20,7 +20,10 @@ function sdoUrl(wl) {
   // Cache-bust once per 5 min so we don't pin a stale frame in the browser cache.
   const bust = Math.floor(Date.now() / (5 * 60e3));
   // Route through the proxy on --serve so it benefits from server-side caching.
-  const viaProxy = location.protocol.startsWith("http") && ["localhost", "127.0.0.1"].includes(location.hostname);
+  // The static build marks itself with <meta name="aurora-static-deploy"> so we
+  // skip the (non-existent) proxy when previewing build/ locally.
+  const isStaticDeploy = !!document.querySelector('meta[name="aurora-static-deploy"]');
+  const viaProxy = !isStaticDeploy && location.protocol.startsWith("http") && ["localhost", "127.0.0.1"].includes(location.hostname);
   return viaProxy ? `/proxy?u=${encodeURIComponent(base)}&v=${bust}` : `${base}?v=${bust}`;
 }
 

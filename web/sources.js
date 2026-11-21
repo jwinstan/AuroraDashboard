@@ -13,7 +13,13 @@ export const URLS = {
 export const OPEN_METEO = "https://api.open-meteo.com/v1/forecast";
 export const METNO = "https://api.met.no/weatherapi/locationforecast/2.0/complete";
 
-const viaProxy = location.protocol.startsWith("http") && ["localhost", "127.0.0.1"].includes(location.hostname);
+// Only use the --serve proxy when we're actually behind one. The static build
+// (served from file:// or a plain http.server, or from GitHub Pages) marks
+// itself with <meta name="aurora-static-deploy"> so we don't try to hit a
+// non-existent /proxy endpoint. The hostname check alone was insufficient
+// because local testing of build/ via python -m http.server is also 127.0.0.1.
+const isStaticDeploy = !!document.querySelector('meta[name="aurora-static-deploy"]');
+const viaProxy = !isStaticDeploy && location.protocol.startsWith("http") && ["localhost", "127.0.0.1"].includes(location.hostname);
 
 export async function getJSON(url) {
   const tries = viaProxy ? [`/proxy?u=${encodeURIComponent(url)}`, url] : [url];
