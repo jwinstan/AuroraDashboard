@@ -349,9 +349,12 @@ function cacheGetAny(key) {
 }
 
 async function fetchCmes(qs) {
-  // kauai.ccmc.gsfc.nasa.gov doesn't send CORS headers, so a browser can only
-  // reach it through the --serve proxy. On the static deploy, only api.nasa.gov.
-  const urls = [`${DONKI_NASA}/CME?${qs}`];
+  // api.nasa.gov requires api_key on every request; DEMO_KEY is the public
+  // throttled fallback. The --serve proxy swaps this for NASA_API_KEY when set
+  // in env ([aurora_fi.py:202-208]), so this works on both static and --serve.
+  // kauai.ccmc.gsfc.nasa.gov has no CORS, so only usable via the proxy.
+  const nasaQs = qs.includes("api_key=") ? qs : `${qs}&api_key=DEMO_KEY`;
+  const urls = [`${DONKI_NASA}/CME?${nasaQs}`];
   if (viaProxy) urls.push(`${DONKI_CCMC}/CME?${qs}`);
   const r = await tryUrls(urls);
   return r;
