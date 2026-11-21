@@ -25,6 +25,11 @@ sys.path.insert(0, str(ROOT))
 from aurora import grid as G  # noqa: E402
 from aurora import places as P  # noqa: E402
 
+# The hourly deploy workflow re-runs this script every hour. Extend grid.py's
+# default 1 h TTL so the cron builds mostly serve from cache and spend their
+# Open-Meteo budget on the countries whose previous fetch failed.
+G.TTL_SEC = int(os.environ.get("BUILD_STATIC_GRID_TTL", "14400"))  # 4 h
+
 
 BUILD = ROOT / "build"
 WEB = ROOT / "web"
@@ -72,11 +77,21 @@ def main() -> int:
     grid_dir = BUILD / "grid"
     grid_dir.mkdir(exist_ok=True)
 
+    # Open-Meteo throttles ~600 calls/min per IP. Each batched request with N
+    # locations counts as N calls, so six countries worth of grid batches fired
+    # back-to-back blows past the burst limit and later countries get 429'd into
+    # empty grids. A 60 s pause between countries keeps us comfortably under.
+    # The first country runs immediately; skip the delay on the first iteration.
+    INTER_COUNTRY_SLEEP_S = int(os.environ.get("BUILD_STATIC_INTER_COUNTRY_SLEEP", "60"))
+
     errors: list[str] = []
-    for cc in places_cfg["countries"]:
+    for i, cc in enumerate(places_cfg["countries"]):
+        if i > 0 and INTER_COUNTRY_SLEEP_S > 0:
+            print(f"[grid] sleeping {INTER_COUNTRY_SLEEP_S}s before next country...", flush=True)
+            time.sleep(INTER_COUNTRY_SLEEP_S)
         print(f"[grid] {cc} ...", flush=True)
         try:
-            data, origin = G.fetch_grid(cc, places_cfg, errors=errors, force=True)
+            data, origin = G.fetch_grid(cc, places_cfg, errors=errors, force=False)
             out = grid_dir / f"{cc}.json"
             out.write_text(json.dumps(data), encoding="utf-8")
             print(f"[grid] {cc} {origin} cells={len(data.get('cells', []))} -> {out.relative_to(ROOT)}")

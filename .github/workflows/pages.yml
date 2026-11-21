@@ -31,6 +31,15 @@ jobs:
         with:
           python-version: "3.12"
 
+      # Persist aurora/grid.py's disk cache across workflow runs so a country
+      # that succeeded on a previous run doesn't need to re-fetch, freeing
+      # Open-Meteo quota for countries that still need refreshing.
+      - uses: actions/cache@v4
+        with:
+          path: .cache
+          key: aurora-grid-cache-${{ github.run_id }}
+          restore-keys: aurora-grid-cache-
+
       - name: Build static site
         run: python tools/build_static.py
 

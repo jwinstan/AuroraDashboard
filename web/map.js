@@ -410,6 +410,19 @@ async function loadFor(cc) {
     const [grid, world] = await Promise.all([loadGrid(cc), loadWorld()]);
     mapState.grid = grid;
     mapState.world = world;
+    // If the pre-built grid is empty (every batch 429'd during the CI build),
+    // paint the country outline only and tell the user instead of leaving
+    // the previous country's canvas up.
+    if (!grid.times || grid.times.length === 0) {
+      slider.max = 0;
+      slider.value = 0;
+      mapState.hour = 0;
+      fitCanvasToParent();
+      recomputeProjection();
+      whenLabel.textContent = "No cloud data for this country right now — the grid rebuilds hourly.";
+      render();
+      return;
+    }
     slider.max = Math.max(0, grid.times.length - 1);
     // Default the slider to the hour nearest "now", not the first grid hour
     // (which is 00:00 UTC of today — often already in the past).
