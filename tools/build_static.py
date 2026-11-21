@@ -12,8 +12,11 @@ Run from the repo root:
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import stat
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -32,9 +35,28 @@ def copy_tree(src: Path, dst: Path) -> None:
     shutil.copytree(src, dst, dirs_exist_ok=True)
 
 
+def rmtree_retry(path: Path, attempts: int = 5) -> None:
+    """``shutil.rmtree`` with retries. OneDrive on Windows briefly locks files
+    after sync, so a naive rmtree hits ``PermissionError`` on local dev builds."""
+    def on_error(func, p, exc):
+        try:
+            os.chmod(p, stat.S_IWRITE)
+            func(p)
+        except Exception:
+            pass
+    for i in range(attempts):
+        try:
+            shutil.rmtree(path, onerror=on_error)
+            return
+        except PermissionError:
+            if i == attempts - 1:
+                raise
+            time.sleep(0.5 * (i + 1))
+
+
 def main() -> int:
     if BUILD.exists():
-        shutil.rmtree(BUILD)
+        rmtree_retry(BUILD)
     BUILD.mkdir()
 
     copy_tree(WEB, BUILD)

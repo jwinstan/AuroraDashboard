@@ -23,7 +23,9 @@ export async function getJSON(url) {
       try {
         const r = await fetch(u, { cache: "no-store" });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return await r.json();
+        const text = await r.text();
+        if (!text.trim()) return null;  // SWPC occasionally returns empty bodies during quiet periods.
+        return JSON.parse(text);
       } catch (e) { err = e; }
     }
   }
@@ -347,10 +349,11 @@ function cacheGetAny(key) {
 }
 
 async function fetchCmes(qs) {
-  const r = await tryUrls([
-    `${DONKI_NASA}/CME?${qs}`,
-    `${DONKI_CCMC}/CME?${qs}`,
-  ]);
+  // kauai.ccmc.gsfc.nasa.gov doesn't send CORS headers, so a browser can only
+  // reach it through the --serve proxy. On the static deploy, only api.nasa.gov.
+  const urls = [`${DONKI_NASA}/CME?${qs}`];
+  if (viaProxy) urls.push(`${DONKI_CCMC}/CME?${qs}`);
+  const r = await tryUrls(urls);
   return r;
 }
 

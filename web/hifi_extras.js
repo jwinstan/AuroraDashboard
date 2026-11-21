@@ -56,8 +56,10 @@ async function renderXray() {
   if (!host) return;
   try {
     const raw = await getJSON("https://services.swpc.noaa.gov/json/goes/primary/xrays-1-day.json");
-    // Two bands: 0.1-0.8 nm (long, defines the flare class) +
-    //            0.05-0.4 nm (short, hotter plasma; peaks earlier on impulsive flares).
+    if (!raw || !raw.length) {
+      host.innerHTML = `<div class="sub small">GOES X-ray: no data in the last day.</div>`;
+      return;
+    }
     const long = raw.filter(r => r.energy === "0.1-0.8nm");
     const shortRaw = raw.filter(r => r.energy === "0.05-0.4nm");
     if (!long.length) throw new Error("no long-band samples");
@@ -104,6 +106,10 @@ async function renderProtons() {
   if (!host) return;
   try {
     const raw = await getJSON("https://services.swpc.noaa.gov/json/goes/primary/integral-protons-1-day.json");
+    if (!raw || !raw.length) {
+      host.innerHTML = `<div class="sub small">GOES protons: no data in the last day (quiet SEP background).</div>`;
+      return;
+    }
     const CHANNELS = [
       { match: /10\s*MeV/i,  name: ">=10 MeV (S-scale)", color: "var(--series-1)" },
       { match: /50\s*MeV/i,  name: ">=50 MeV",           color: "var(--series-2)" },
