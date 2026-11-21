@@ -43,9 +43,18 @@ jobs:
       - name: Build static site
         run: python tools/build_static.py
 
+      # Fail fast if build/ wasn't produced so we don't silently upload nothing.
+      - name: Verify build output
+        run: |
+          test -d build || { echo "build/ missing after build step"; exit 1; }
+          test -f build/index.html || { echo "build/index.html missing"; exit 1; }
+          echo "build contains:" && ls build
+
       - uses: actions/configure-pages@v5
 
-      - uses: actions/upload-pages-artifact@v3
+      # Pinned to v3.0.1 — the earliest release that uses upload-artifact@v4
+      # internally. Required since GitHub sunset upload-artifact@v3 in 2025.
+      - uses: actions/upload-pages-artifact@v3.0.1
         with:
           path: build
 
