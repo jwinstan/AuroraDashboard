@@ -1,0 +1,96 @@
+{
+  "countries": {
+    "FI": {
+      "name": "Finland",
+      "tz": "Europe/Helsinki",
+      "default_place": "kilpisjarvi",
+      "bbox": [59.0, 20.0, 70.5, 32.0],
+      "places": {
+        "helsinki":    {"name": "Helsinki",    "lat": 60.17, "lon": 24.94},
+        "turku":       {"name": "Turku",       "lat": 60.45, "lon": 22.27},
+        "tampere":     {"name": "Tampere",     "lat": 61.50, "lon": 23.76},
+        "jyvaskyla":   {"name": "Jyväskylä",   "lat": 62.24, "lon": 25.75},
+        "kuopio":      {"name": "Kuopio",      "lat": 62.89, "lon": 27.68},
+        "oulu":        {"name": "Oulu",        "lat": 65.01, "lon": 25.47},
+        "kuusamo":     {"name": "Kuusamo",     "lat": 65.97, "lon": 29.19},
+        "rovaniemi":   {"name": "Rovaniemi",   "lat": 66.50, "lon": 25.73},
+        "sodankyla":   {"name": "Sodankylä",   "lat": 67.42, "lon": 26.59},
+        "levi":        {"name": "Levi",        "lat": 67.80, "lon": 24.81},
+        "saariselka":  {"name": "Saariselkä",  "lat": 68.42, "lon": 27.41},
+        "inari":       {"name": "Inari",       "lat": 68.91, "lon": 27.03},
+        "utsjoki":     {"name": "Utsjoki",     "lat": 69.91, "lon": 27.03},
+        "kilpisjarvi": {"name": "Kilpisjärvi", "lat": 69.05, "lon": 20.79}
+      }
+    },
+    "SE": {
+      "name": "Sweden",
+      "tz": "Europe/Stockholm",
+      "default_place": "abisko",
+      "bbox": [55.0, 10.0, 69.5, 24.5],
+      "places": {
+        "abisko":    {"name": "Abisko",    "lat": 68.35, "lon": 18.83},
+        "kiruna":    {"name": "Kiruna",    "lat": 67.86, "lon": 20.23},
+        "jokkmokk":  {"name": "Jokkmokk",  "lat": 66.61, "lon": 19.82},
+        "lulea":     {"name": "Luleå",     "lat": 65.58, "lon": 22.15},
+        "ostersund": {"name": "Östersund", "lat": 63.18, "lon": 14.64},
+        "stockholm": {"name": "Stockholm", "lat": 59.33, "lon": 18.07}
+      }
+    },
+    "NO": {
+      "name": "Norway",
+      "tz": "Europe/Oslo",
+      "default_place": "tromso",
+      "bbox": [57.5, 4.0, 71.5, 31.5],
+      "places": {
+        "tromso":       {"name": "Tromsø",       "lat": 69.65, "lon": 18.96},
+        "alta":         {"name": "Alta",         "lat": 69.97, "lon": 23.27},
+        "svolvaer":     {"name": "Svolvær",      "lat": 68.23, "lon": 14.57},
+        "kirkenes":     {"name": "Kirkenes",     "lat": 69.73, "lon": 30.05},
+        "bodo":         {"name": "Bodø",         "lat": 67.28, "lon": 14.40},
+        "trondheim":    {"name": "Trondheim",    "lat": 63.43, "lon": 10.40},
+        "oslo":         {"name": "Oslo",         "lat": 59.91, "lon": 10.75},
+        "longyearbyen": {"name": "Longyearbyen", "lat": 78.22, "lon": 15.65, "tz": "Arctic/Longyearbyen"}
+      }
+    },
+    "DK": {
+      "name": "Denmark",
+      "tz": "Europe/Copenhagen",
+      "default_place": "skagen",
+      "bbox": [54.5, 8.0, 58.0, 15.5],
+      "places": {
+        "skagen":     {"name": "Skagen",     "lat": 57.72, "lon": 10.58},
+        "copenhagen": {"name": "Copenhagen", "lat": 55.68, "lon": 12.57},
+        "torshavn":   {"name": "Tórshavn",   "lat": 62.01, "lon": -6.77, "tz": "Atlantic/Faroe"}
+      }
+    },
+    "IS": {
+      "name": "Iceland",
+      "tz": "Atlantic/Reykjavik",
+      "default_place": "reykjavik",
+      "bbox": [63.0, -25.0, 67.0, -13.0],
+      "places": {
+        "reykjavik":  {"name": "Reykjavík",   "lat": 64.15, "lon": -21.94},
+        "thingvellir":{"name": "Þingvellir",  "lat": 64.26, "lon": -21.13},
+        "akureyri":   {"name": "Akureyri",    "lat": 65.68, "lon": -18.09},
+        "hofn":       {"name": "Höfn",        "lat": 64.25, "lon": -15.21},
+        "isafjordur": {"name": "Ísafjörður",  "lat": 66.07, "lon": -23.13}
+      }
+    },
+    "GL": {
+      "name": "Greenland",
+      "tz": "America/Nuuk",
+      "default_place": "kangerlussuaq",
+      "bbox": [59.0, -73.0, 84.0, -11.0],
+      "places": {
+        "narsarsuaq":       {"name": "Narsarsuaq",       "lat": 61.16, "lon": -45.43},
+        "qaqortoq":         {"name": "Qaqortoq",         "lat": 60.72, "lon": -46.03},
+        "nuuk":             {"name": "Nuuk",             "lat": 64.18, "lon": -51.72},
+        "kangerlussuaq":    {"name": "Kangerlussuaq",    "lat": 67.01, "lon": -50.69},
+        "ilulissat":        {"name": "Ilulissat",        "lat": 69.22, "lon": -51.10},
+        "tasiilaq":         {"name": "Tasiilaq",         "lat": 65.61, "lon": -37.64},
+        "ittoqqortoormiit": {"name": "Ittoqqortoormiit", "lat": 70.49, "lon": -21.97, "tz": "America/Scoresbysund"},
+        "qaanaaq":          {"name": "Qaanaaq",          "lat": 77.47, "lon": -69.23, "tz": "America/Thule"}
+      }
+    }
+  }
+}

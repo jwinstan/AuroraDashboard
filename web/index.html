@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aurora dashboard: Nordics</title>
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #111110;
+  --surface-1: #1a1a19;
+  --surface-2: #232321;
+  --border: #2e2e2b;
+  --grid: #2a2a27;
+  --text-primary: #f0efec;
+  --text-secondary: #c3c2b7;
+  --text-muted: #8f8e86;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --good: #0ca30c;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text-primary);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+body.night { filter: grayscale(1) sepia(1) saturate(5) hue-rotate(-45deg) brightness(.55); }
+main { max-width: 1180px; margin: 0 auto; padding: 16px 20px 40px; }
+h1 { font-size: 20px; margin: 0; font-weight: 600; }
+h2 { font-size: 15px; margin: 0 0 8px; font-weight: 600; }
+.sub { color: var(--text-secondary); font-size: 13px; }
+.muted { color: var(--text-muted); }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; margin-bottom: 12px; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+.controls label { color: var(--text-secondary); font-size: 13px; display: flex; gap: 6px; align-items: center; }
+select, input, button {
+  background: var(--surface-2); color: var(--text-primary); border: 1px solid var(--border);
+  border-radius: 6px; padding: 5px 8px; font: inherit; font-size: 13px;
+}
+input[type=number] { width: 78px; }
+button { cursor: pointer; }
+button:hover { border-color: var(--text-muted); }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+.grid { display: grid; gap: 12px; }
+.tiles { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); margin-bottom: 12px; }
+.tile .label { color: var(--text-secondary); font-size: 12px; }
+.tile .value { font-size: 22px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.tile .note { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+.hero .value { font-size: 28px; }
+.status { display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+.alert { margin-bottom: 12px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-1); display: flex; gap: 10px; align-items: center; }
+.two { grid-template-columns: 1fr 1fr; }
+@media (max-width: 820px) { .two { grid-template-columns: 1fr; } }
+.chart { position: relative; width: 100%; }
+.chart svg { display: block; width: 100%; overflow: visible; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw-bar { width: 14px; height: 10px; border-radius: 2px; display: inline-block; }
+.sw-line { width: 16px; height: 2px; display: inline-block; }
+.tip {
+  position: absolute; pointer-events: none; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 6px; padding: 6px 9px; font-size: 12px; white-space: nowrap; display: none; z-index: 5;
+  box-shadow: 0 4px 14px rgba(0,0,0,.4);
+}
+.tip b { font-weight: 600; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 13px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+th { color: var(--text-secondary); font-weight: 500; font-size: 12px; }
+td.num, th.num { text-align: right; }
+tbody tr.rank { cursor: pointer; }
+tbody tr.rank:hover { background: var(--surface-2); }
+tbody tr.sel { background: var(--surface-2); }
+details summary { cursor: pointer; color: var(--text-secondary); font-size: 13px; margin-top: 8px; }
+.section { margin-bottom: 12px; }
+.errors { color: var(--serious); font-size: 12px; white-space: pre-wrap; }
+a { color: var(--series-1); }
+.small { font-size: 12px; }
+
+/* Info tooltip: ⓘ icon with on-hover/focus popover.
+   Keep content concise — one sentence of definition, one line of ideal/typical ranges. */
+.info { position: relative; display: inline-flex; align-items: center; margin-left: 6px; cursor: help; vertical-align: middle; }
+.info-icon { width: 14px; height: 14px; border-radius: 50%; background: var(--surface-2); color: var(--text-muted); border: 1px solid var(--border); font-size: 10px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
+.info:hover .info-icon, .info:focus-within .info-icon { color: var(--text-primary); border-color: var(--text-secondary); }
+.info-body { display: none; position: absolute; left: 50%; top: 100%; transform: translateX(-50%); margin-top: 6px; z-index: 20; width: 280px; max-width: 80vw; padding: 8px 10px; background: var(--surface-2); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; font-size: 12px; font-weight: 400; line-height: 1.4; box-shadow: 0 6px 20px rgba(0,0,0,.55); white-space: normal; }
+.info-body b { color: var(--text-secondary); }
+.info:hover .info-body, .info:focus-within .info-body { display: block; }
+.card h2 { display: flex; align-items: center; }
+.tile .label { display: inline-flex; align-items: center; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1 id="title">Aurora dashboard</h1>
+      <div class="sub" id="where">Loading…</div>
+    </div>
+    <div class="sub" id="updated"></div>
+  </header>
+
+  <div class="controls">
+    <label>Country <select id="country"></select></label>
+    <label>Place <select id="place"></select></label>
+    <label>Lat <input id="lat" type="number" step="0.01"></label>
+    <label>Lon <input id="lon" type="number" step="0.01"></label>
+    <label>Clouds <select id="csrc">
+      <option value="auto">Auto (Open-Meteo → MET Norway)</option>
+      <option value="openmeteo">Open-Meteo</option>
+      <option value="metno">MET Norway</option>
+    </select></label>
+    <label>Model <select id="cmodel">
+      <option value="">best match</option>
+      <option value="metno_nordic">metno_nordic</option>
+      <option value="ecmwf_ifs025">ecmwf_ifs025</option>
+      <option value="icon_seamless">icon_seamless</option>
+      <option value="gfs_seamless">gfs_seamless</option>
+    </select></label>
+    <label>Hours <select id="hours"><option>24</option><option selected>36</option><option>48</option><option>60</option></select></label>
+    <button id="refresh">Refresh</button>
+    <label><input type="checkbox" id="auto" checked> Auto-refresh (5 min)</label>
+    <button id="night" title="Red, dimmed display that preserves night vision">Night vision</button>
+  </div>
+
+  <div id="alert" class="alert" style="display:none"></div>
+
+  <div class="grid tiles">
+    <div class="card tile hero">
+      <div class="label">Next 24 h<span class="info" tabindex="0"><span class="info-icon">?</span><span class="info-body">Model's best verdict for the next 24 h at this location. <b>GOOD</b> ≥50%, <b>FAIR</b> ≥25%, <b>POOR</b> ≥10%, <b>UNLIKELY</b> &lt;10%. Combines geomagnetic activity, darkness, moon and clouds.</span></span></div>
+      <div class="value" id="t-verdict">–</div><div class="note" id="t-window"></div>
+    </div>
+    <div class="card tile">
+      <div class="label">Bz, 30-min mean<span class="info" tabindex="0"><span class="info-icon">?</span><span class="info-body">North-south component of the interplanetary magnetic field at L1, averaged over the last 30 min. <b>Negative (southward)</b> Bz drives aurora. <b>Below -5 nT</b> sustained is promising; <b>below -10 nT</b> often means a substorm within an hour.</span></span></div>
+      <div class="value" id="t-bz">–</div><div class="note" id="t-bznote"></div>
+    </div>
+    <div class="card tile">
+      <div class="label">Coupling (Newell)<span class="info" tabindex="0"><span class="info-icon">?</span><span class="info-body">Newell coupling function — the rate of solar-wind energy entering the magnetosphere. <b>&lt;4k</b> weak, <b>4-12k</b> moderate, <b>12-25k</b> strong, <b>&gt;25k</b> very strong. Above 20k a substorm is often brewing.</span></span></div>
+      <div class="value" id="t-cpl">–</div><div class="note" id="t-cplnote"></div>
+    </div>
+    <div class="card tile">
+      <div class="label">Kp now (estimated)<span class="info" tabindex="0"><span class="info-icon">?</span><span class="info-body">NOAA's real-time Kp estimate from ground magnetometers, updated every minute. <b>0-2</b> quiet (Lapland only), <b>3-4</b> unsettled (mid-Finland visible), <b>5+</b> G1 storm (Helsinki visible), <b>7+</b> major storm (mid-Europe visible).</span></span></div>
+      <div class="value" id="t-kp">–</div><div class="note" id="t-kpnote"></div>
+    </div>
+    <div class="card tile">
+      <div class="label">OVATION now<span class="info" tabindex="0"><span class="info-icon">?</span><span class="info-body">NOAA's 30-minute aurora oval nowcast from DMSP satellites. <b>Overhead %</b> = chance of visible aurora directly above you; <b>within 500 km north</b> = best chance within that radius. Updated every ~5 min.</span></span></div>
+      <div class="value" id="t-ov">–</div><div class="note" id="t-ovnote"></div>
+    </div>
+    <div class="card tile">
+      <div class="label">Moon<span class="info" tabindex="0"><span class="info-icon">?</span><span class="info-body">Lunar illumination and altitude at this location. A bright moon high in the sky washes out faint aurora. <b>New moon</b> or <b>moon below horizon</b> is ideal; a high full moon cuts your chance by up to 50%.</span></span></div>
+      <div class="value" id="t-moon">–</div><div class="note" id="t-moonnote"></div>
+    </div>
+  </div>
+
+  <div class="card section">
+    <h2>Hourly chance<span class="info" tabindex="0"><span class="info-icon">?</span><span class="info-body">Per-hour visibility score = oval overhead (from Kp) × clear-sky (clouds) × darkness (sun below -6°) × moon factor. Bars are the combined score; lines are the individual factors. Shaded columns are daylight.</span></span></h2>
+    <div class="sub small" style="margin-bottom:6px">Chance = oval near you × clear sky × darkness × moon. Shaded columns are daylight.</div>
+    <div id="c-hourly" class="chart"></div>
+    <details><summary>Table view</summary><div id="hourly-table"></div></details>
+  </div>
+
+  <div class="grid two section">
+    <div class="card">
+      <h2>IMF at L1, last 6 h<span class="info" tabindex="0"><span class="info-icon">?</span><span class="info-body">Interplanetary Magnetic Field strength measured at the L1 spacecraft (~1.5M km upstream). <b>Bz (GSM)</b> is the north-south component — <b>negative is aurora-friendly</b>. <b>Bt</b> is total field magnitude; higher = more energetic solar wind.</span></span></h2>
+      <div class="sub small" style="margin-bottom:6px">Dashed now-line marks the latest spacecraft reading. The plasma shown at the right edge reaches Earth after the propagation delay (see Coupling tile).</div>
+      <div id="c-imf" class="chart"></div>
+    </div>
+    <div class="card">
+      <h2>Solar wind speed at L1, last 6 h<span class="info" tabindex="0"><span class="info-icon">?</span><span class="info-body">Proton bulk speed at the L1 spacecraft. <b>&lt;400 km/s</b> slow, <b>400-600</b> moderate, <b>600-800</b> fast (high-speed stream from a coronal hole), <b>&gt;800</b> CME-driven. Higher speed = more energy and shorter propagation delay to Earth.</span></span></h2>
+      <div class="sub small" style="margin-bottom:6px">Dashed now-line marks the latest spacecraft reading. The plasma shown at the right edge reaches Earth after the propagation delay (see Coupling tile).</div>
+      <div id="c-speed" class="chart"></div>
+    </div>
+  </div>
+
+  <div class="card section">
+    <h2>Kp, NOAA 3-hour time slots<span class="info" tabindex="0"><span class="info-icon">?</span><span class="info-body">Planetary Kp index in 3-hour slots. Past slots are observed or estimated; future slots are NOAA's forecast. <b>Kp 5+</b> = G1 geomagnetic storm (orange bars). Beyond ~24 h the forecast has limited skill.</span></span></h2>
+    <div class="sub small" style="margin-bottom:6px">Past slots: observed or estimated. Future slots: NOAA forecast. Kp ≥ 5 is a G1+ storm.</div>
+    <div id="c-kp" class="chart"></div>
+  </div>
+
+  <div class="card section">
+    <h2>Where to go: best chance in the next 24 h<span class="info" tabindex="0"><span class="info-icon">?</span><span class="info-body">Same model applied to every preset in the current country, ranked by best hour in the next 24 h. Each place uses its own cloud forecast. Click a row to switch location.</span></span></h2>
+    <div class="sub small" style="margin-bottom:6px">Same model, each place's own cloud forecast. Click a row to switch to that place.</div>
+    <div id="rank"></div>
+  </div>
+
+  <div class="card section small">
+    <details>
+      <summary style="font-size:15px; font-weight:600; color:var(--text-primary); margin-bottom:4px">How the modelling works</summary>
+      <div class="sub" style="margin-top:10px">
+        <p><b>The chain.</b> The sun throws out magnetised plasma (the solar wind). When it hits Earth's magnetic field it drives currents that dump energy into the upper atmosphere. The aurora is that energy exciting air molecules at 100-300 km altitude.</p>
+
+        <p><b>Data sources.</b> The dashboard stitches together five live feeds:</p>
+        <ul style="margin-top:0">
+          <li><a href="https://www.swpc.noaa.gov/products/real-time-solar-wind">NOAA SWPC real-time solar wind</a> — magnetic field (Bz, Bt) and plasma (speed, density) measured at the L1 Lagrange point, 1.5 million km upstream. Updated every minute.</li>
+          <li><a href="https://www.swpc.noaa.gov/products/planetary-k-index">Kp index</a> — the planet-wide magnetic activity level in 3-hour bins. Observed, estimated, and forecast up to 3 days ahead.</li>
+          <li><a href="https://www.swpc.noaa.gov/products/aurora-30-minute-forecast">OVATION</a> — a 30-minute probability-of-visibility map from DMSP satellites. Used for the first ~1.5 h instead of the Kp-based model.</li>
+          <li><a href="https://open-meteo.com/">Open-Meteo</a> and <a href="https://api.met.no/">MET Norway</a> — cloud cover forecasts in low / mid / high layers.</li>
+        </ul>
+
+        <p><b>Per-hour score.</b> For every hour of the forecast, at your location:</p>
+        <pre style="background:var(--surface-2); padding:8px 10px; border-radius:6px; overflow-x:auto; margin:4px 0">P(aurora) = platt( P_geo_raw ) × P_clear × darkness × moon_factor</pre>
+        <ul style="margin-top:0">
+          <li><b>P_geo_raw</b> — geometric probability the auroral oval is overhead or nearby. Uses the current forecast Kp to place the oval's equatorward edge in corrected geomagnetic latitude (AACGM-v2). Roughly: edge ≈ 66.5° − 2°·Kp, with a magnetic-local-time shift that pushes the oval ~3-5° further south around magnetic midnight and further north toward magnetic noon. A sigmoid ±1.5° wide blurs the hard boundary, plus a weaker "on the horizon" contribution from 2.5° further south. Capped at 0.8. A poleward edge cuts the score to ~0 if you're in the polar cap.</li>
+          <li><b>platt(·)</b> — a 2-parameter calibration, <code>σ(1.98·logit(P) − 1.79)</code>, fitted against 20,806 station-hours of <a href="https://space.fmi.fi/image/www/">IMAGE</a> magnetometer activity across 10 Fennoscandian stations, Sep–Nov 2024. Monotone, so ordering (AUC 0.91) is untouched — only the dial is rescaled. Brier drops from 0.14 (raw) to 0.09 against a climatology baseline of 0.15. Before this, the model was ~2× over-confident in the mid-range; after it, the number on the dial matches observed frequencies.</li>
+          <li><b>P_clear</b> = 1 − max(low, mid, ½·high) cloud fraction. Low cloud blocks everything; high cloud is thin cirrus that aurora can shine through.</li>
+          <li><b>darkness</b> — linear ramp from 0 at sun altitude −6° (civil twilight) to 1 at −12° (nautical twilight).</li>
+          <li><b>moon_factor</b> — 1 if the moon is below the horizon, else 1 − 0.5·illuminated_fraction·sin(alt)/sin(30°). A full moon high in the sky halves your chance; a crescent at the horizon barely matters.</li>
+        </ul>
+
+        <p><b>Corrected magnetic latitude (AACGM).</b> Earth's field isn't a clean dipole — it's offset and tilted, and has a big dent in the North Atlantic. The dashboard uses AACGM-v2 coordinates at 110 km altitude, which trace the actual field line back to the magnetic equator. For Finland the correction is &lt;1°, but for Iceland and Greenland it's 3-5° equatorward of what a centered-dipole model would suggest.</p>
+
+        <p><b>Confidence (0-1):</b></p>
+        <ul style="margin-top:0">
+          <li>Short-term (next ~1.5 h, when OVATION is in play): <b>0.7</b></li>
+          <li>Tonight (next 6-12 h): <b>0.5</b> — Kp forecast skill drops fast after a day</li>
+          <li>Tomorrow night: <b>0.3</b> — mostly a wild guess unless there's an active CME</li>
+          <li>Cloud forecast at 24 h+: <b>0.4</b> — weather models drift more than magnetic ones</li>
+        </ul>
+
+        <p><b>Calibration caveat.</b> The ground truth was magnetometer activity (hourly X-component range ≥ 100 nT). Magnetometers under-count quiet or pulsating arcs — faint aurora can be visible overhead with no strong current signature. So the calibrated P is a *lower bound* on visible-aurora probability, especially at the top of the scale: observations show ~95% activity rate when the calibrated dial reads 70%. In practice, treat anything ≥ 60% as "going off", below 15% as climatological noise.</p>
+
+        <p><b>What this doesn't model:</b> substorms (sudden auroral intensification, unpredictable), cusp aurora around magnetic noon (dayside, affects Svalbard mostly), polar-cap arcs during quiet northward Bz, light pollution, your horizon obstructions, and you going to sleep.</p>
+      </div>
+    </details>
+    <div id="errors" class="errors" style="margin-top:8px"></div>
+  </div>
+</main>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>
