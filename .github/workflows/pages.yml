@@ -54,9 +54,11 @@ jobs:
 
       - uses: actions/configure-pages@v5
 
-      # Pinned to v3.0.1 — the earliest release that uses upload-artifact@v4
-      # internally. Required since GitHub sunset upload-artifact@v3 in 2025.
-      - uses: actions/upload-pages-artifact@v3.0.1
+      # Floating v3 tag — v3.0.1 was pinned after GitHub sunset upload-artifact@v3
+      # in 2025, but deploy-pages@v4 has since drifted and the old pin stopped
+      # producing an artifact deploy-pages could find. The v3 tag tracks the
+      # latest v3.x which keeps the two in sync.
+      - uses: actions/upload-pages-artifact@v3
         with:
           path: build
 
