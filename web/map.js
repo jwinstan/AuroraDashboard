@@ -655,12 +655,16 @@ function onPointerMove(ev) {
   const c = cell.clouds[mapState.hour];
   if (!c) { tip.style.display = "none"; return; }
   let extra = "";
-  if (mapState.layer === "aurora") {
+  if (mapState.layer === "aurora" || mapState.layer === "auroraClear") {
     const tMs = mapState.grid.times[mapState.hour] ? Date.parse(mapState.grid.times[mapState.hour] + "Z") : Date.now();
     // Must pass `c` (this cell's clouds for the hour) so the tooltip matches the
     // dot label and the background shading; omitting it gives a cloud-free number.
     const p = auroraChanceAt(cell.lat, cell.lon, tMs, window.auroraApp?.data, c);
+    // Clear-sky is the same chain with the cloud multiplier removed; shows what
+    // you'd see from this cell if you found a gap in the cloud cover.
+    const pClear = auroraChanceAt(cell.lat, cell.lon, tMs, window.auroraApp?.data, null);
     if (p != null) extra = `<br><b>Aurora chance: ${Math.round(p * 100)}%</b>`;
+    if (pClear != null) extra += `<br>Clear-sky chance: ${Math.round(pClear * 100)}%`;
   }
   tip.innerHTML = `<b>${cell.lat.toFixed(1)}°N ${cell.lon.toFixed(1)}°E</b><br>low ${c[1] ?? "?"}% · mid ${c[2] ?? "?"}% · high ${c[3] ?? "?"}%<br>total ${c[0] ?? "?"}%${extra}`;
   tip.style.display = "block";
@@ -668,10 +672,40 @@ function onPointerMove(ev) {
   tip.style.top = `${ev.clientY - rect.top + 12}px`;
 }
 
+// Map load is now click-gated so first-boot doesn't fetch a ~1 MB grid or
+// render the canvas. Once the user clicks "Load map" we flip this flag and the
+// country selector + other listeners start driving renders.
+let mapLoaded = false;
+
+function hidePlaceholder() {
+  const ph = document.getElementById("map-placeholder");
+  if (ph) ph.style.display = "none";
+  const body = document.getElementById("map-body");
+  if (body) body.style.display = "";
+}
+
+async function loadAndShow(cc) {
+  hidePlaceholder();
+  mapLoaded = true;
+  await loadFor(cc);
+}
+
 function init() {
-  // Country changes: re-fetch grid.
+  const loadBtn = document.getElementById("map-load-btn");
+  if (loadBtn) {
+    loadBtn.addEventListener("click", () => {
+      const cc = countrySel?.value || "FI";
+      loadAndShow(cc);
+    });
+  }
+  // Country changes: re-fetch grid, but only if the user has already asked for
+  // the map. Otherwise the placeholder's country label updates instead.
   if (countrySel) {
-    countrySel.addEventListener("change", () => loadFor(countrySel.value));
+    countrySel.addEventListener("change", () => {
+      const label = document.getElementById("map-country-label");
+      if (label) label.textContent = countryName(countrySel.value);
+      if (mapLoaded) loadFor(countrySel.value);
+    });
   }
   slider.addEventListener("input", () => {
     mapState.hour = +slider.value;
@@ -705,11 +739,11 @@ function init() {
   // app.js dispatches this once its Kp/OVATION/solar-wind data has loaded,
   // which the aurora-chance layer needs.
   window.addEventListener("aurora:data", () => {
-    if (mapState.layer === "aurora") render();
+    if (mapLoaded && (mapState.layer === "aurora" || mapState.layer === "auroraClear")) render();
   });
   // Per-place cloud forecasts arrive after the main data. Repaint so the place
   // dot numbers switch from nearest-cell fallback to the exact per-point values.
-  window.addEventListener("aurora:rank-ready", () => render());
+  window.addEventListener("aurora:rank-ready", () => { if (mapLoaded) render(); });
   canvas.addEventListener("mousemove", onPointerMove);
   canvas.addEventListener("mouseleave", () => { tip.style.display = "none"; });
 
@@ -723,11 +757,28 @@ function init() {
     }, 150);
   });
 
-  // app.js initialises mapState.country in its own startup; wait a tick to pick it up.
-  const start = () => {
-    const cc = countrySel?.value || "FI";
-    loadFor(cc);
+  // Seed the placeholder's country label from the current selector value.
+  // app.js populates the <select> asynchronously, so poll briefly until the
+  // selector has options; after that the "change" handler keeps it in sync.
+  const setInitialLabel = () => {
+    const label = document.getElementById("map-country-label");
+    if (!label || !countrySel) return;
+    if (!countrySel.options.length) {
+      setTimeout(setInitialLabel, 100);
+      return;
+    }
+    label.textContent = countryName(countrySel.value);
   };
-  if (document.readyState === "complete") start();
-  else window.addEventListener("load", start, { once: true });
+  if (document.readyState === "complete") setInitialLabel();
+  else window.addEventListener("load", setInitialLabel, { once: true });
+}
+
+// Resolve a country code to its display name. Reads whichever source is
+// already in memory (inlined __PLACES__ or the populated <select>); falls back
+// to the code so the placeholder is still usable while config.json is loading.
+function countryName(cc) {
+  const inlined = window.__PLACES__?.countries?.[cc]?.name;
+  if (inlined) return inlined;
+  const opt = countrySel ? Array.from(countrySel.options).find(o => o.value === cc) : null;
+  return opt?.textContent?.trim() || cc || "country";
 }

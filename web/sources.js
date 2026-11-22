@@ -31,11 +31,27 @@ export async function getJSON(url) {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const text = await r.text();
         if (!text.trim()) return null;  // SWPC occasionally returns empty bodies during quiet periods.
-        return JSON.parse(text);
+        return parseLenient(text);
       } catch (e) { err = e; }
     }
   }
   throw new Error(`${new URL(url).hostname}${new URL(url).pathname}: ${err && err.message}`);
+}
+
+// NOAA SWPC occasionally serves a payload with a stray trailing byte (e.g. an
+// extra newline-after-close, or two responses concatenated); the JSON is valid
+// up through its final `]`/`}` but strict JSON.parse rejects it. If that
+// happens, truncate at the matching close so the day's data still renders
+// instead of blanking the panel until the next hourly fetch.
+function parseLenient(text) {
+  try { return JSON.parse(text); }
+  catch (e) {
+    const trimmed = text.trimEnd();
+    try { return JSON.parse(trimmed); } catch {}
+    const last = Math.max(trimmed.lastIndexOf("]"), trimmed.lastIndexOf("}"));
+    if (last > 0) return JSON.parse(trimmed.slice(0, last + 1));
+    throw e;
+  }
 }
 
 async function firstOf(urls) {

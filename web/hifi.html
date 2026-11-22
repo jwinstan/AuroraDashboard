@@ -217,26 +217,33 @@ a { color: var(--series-1); }
     <h2>Cloud and aurora map<span class="info" tabindex="0"><span class="info-icon">?</span><span class="info-body">Per-grid-cell view across the selected country. <b>Cloud layers</b> show overcast as bright white, clear as transparent. <b>Aurora chance</b> (blue) combines oval position, darkness, moon, and clouds. <b>Green lines</b> are the model oval boundaries for the hour's forecast Kp (solid = equatorward edge, dashed = poleward). Dots are presets coloured by their verdict.</span></span></h2>
     <div class="sub small" style="margin-bottom:6px">Darker = cloudier. Slider moves through the 48 h forecast.</div>
     <div id="map">
-      <div class="map-controls">
-        <span class="map-when" id="map-when">–</span>
-        <input type="range" id="map-time" min="0" max="48" value="0">
+      <div id="map-placeholder" style="padding:24px 16px; text-align:center; border:1px dashed var(--border); border-radius:6px; background:var(--surface-2);">
+        <div class="sub" style="margin-bottom:10px">Map for <b id="map-country-label">country</b> — click to fetch the ~400-cell cloud + aurora grid.</div>
+        <button id="map-load-btn" type="button" style="padding:8px 14px; font-size:14px; border-radius:6px; border:1px solid var(--border); background:var(--series-1); color:#fff; cursor:pointer;">🗺️ Load map</button>
       </div>
-      <div class="map-controls" style="margin-top:4px">
-        <label>Layer
-          <select id="map-layer" autocomplete="off">
-            <option value="aurora" selected>Aurora chance</option>
-            <option value="auroraClear">Aurora chance (ignore clouds)</option>
-            <option value="low">Low cloud (blocks sky)</option>
-            <option value="tot">Total cloud</option>
-            <option value="mid">Mid cloud</option>
-            <option value="high">High cloud (thin)</option>
-          </select>
-        </label>
-        <span class="map-when" id="map-stats"></span>
+      <div id="map-body" style="display:none;">
+        <div class="map-controls">
+          <span class="map-when" id="map-when">–</span>
+          <input type="range" id="map-time" min="0" max="48" value="0">
+        </div>
+        <div class="map-controls" style="margin-top:4px">
+          <label>Layer
+            <select id="map-layer" autocomplete="off">
+              <option value="aurora" selected>Aurora chance</option>
+              <option value="auroraClear">Aurora chance (ignore clouds)</option>
+              <option value="low">Low cloud (blocks sky)</option>
+              <option value="tot">Total cloud</option>
+              <option value="mid">Mid cloud</option>
+              <option value="high">High cloud (thin)</option>
+            </select>
+          </label>
+          <span class="map-when" id="map-stats"></span>
+        </div>
+        <canvas id="map-canvas" width="900" height="520" aria-label="Cloud cover map"></canvas>
+        <div class="map-tip" id="map-tip"></div>
+        <div class="map-legend"><span id="map-legend-label">Low cloud cover</span> <span>0%</span><span class="ramp"></span><span>100%</span></div>
+        <p class="sub small" style="margin-top:8px">Cloud forecasts are coarse (~0.4°). Cross-check a high-resolution source for gaps before you drive: <a href="https://www.windy.com/?clouds,low" target="_blank" rel="noopener">Windy (low clouds)</a> · <a href="https://www.ventusky.com/?p=65;20;4&amp;l=clouds-total" target="_blank" rel="noopener">Ventusky</a> · <a href="https://en.sat24.com/en/eu" target="_blank" rel="noopener">sat24 (live satellite)</a>.</p>
       </div>
-      <canvas id="map-canvas" width="900" height="520" aria-label="Cloud cover map"></canvas>
-      <div class="map-tip" id="map-tip"></div>
-      <div class="map-legend"><span id="map-legend-label">Low cloud cover</span> <span>0%</span><span class="ramp"></span><span>100%</span></div>
     </div>
   </div>
 
