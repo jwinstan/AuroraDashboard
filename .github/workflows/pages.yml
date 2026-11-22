@@ -41,6 +41,8 @@ jobs:
           restore-keys: aurora-grid-cache-
 
       - name: Build static site
+        env:
+          NASA_API_KEY: ${{ secrets.NASA_API_KEY }}
         run: python tools/build_static.py
 
       # Fail fast if build/ wasn't produced so we don't silently upload nothing.

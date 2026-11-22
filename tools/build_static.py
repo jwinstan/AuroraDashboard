@@ -17,6 +17,9 @@ import shutil
 import stat
 import sys
 import time
+import urllib.error
+import urllib.request
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -109,13 +112,52 @@ def main() -> int:
             print(f"[grid] {cc} FAILED: {e}", file=sys.stderr)
             errors.append(f"{cc}: {e}")
 
+    # Pre-bake DONKI CMEs with the deploy's NASA_API_KEY so visitors don't share
+    # the 30 req/hour DEMO_KEY bucket. Non-fatal: the browser still falls back
+    # to the live endpoint if this file is absent.
+    fetch_donki_cmes(BUILD, errors)
+
     if errors:
-        print("\nBuild finished with grid errors:", file=sys.stderr)
+        print("\nBuild finished with errors:", file=sys.stderr)
         for e in errors:
             print(f"  {e}", file=sys.stderr)
 
     print(f"\nStatic site built at {BUILD.relative_to(ROOT)}/")
     return 0
+
+
+def fetch_donki_cmes(build: Path, errors: list[str]) -> None:
+    key = os.environ.get("NASA_API_KEY")
+    if not key:
+        print("[donki] NASA_API_KEY not set — skipping CME pre-fetch (browser will use DEMO_KEY)")
+        return
+    # Match sources.js: 4 days back to 1 day ahead. Widen by a day either side
+    # so the file stays valid as the browser's window drifts across UTC midnight.
+    today = datetime.now(timezone.utc).date()
+    start = today - timedelta(days=5)
+    end = today + timedelta(days=2)
+    qs = f"startDate={start.isoformat()}&endDate={end.isoformat()}&api_key={key}"
+    url = f"https://api.nasa.gov/DONKI/CME?{qs}"
+    print(f"[donki] fetching CMEs {start} to {end} ...", flush=True)
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "aurora-fi-build/1.0"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            body = r.read()
+        # Validate it's JSON before writing so we don't ship a 429 HTML page.
+        data = json.loads(body)
+        out_dir = build / "donki"
+        out_dir.mkdir(exist_ok=True)
+        (out_dir / "cmes.json").write_bytes(body)
+        (out_dir / "meta.json").write_text(json.dumps({
+            "startDate": start.isoformat(),
+            "endDate": end.isoformat(),
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "count": len(data) if isinstance(data, list) else 0,
+        }), encoding="utf-8")
+        print(f"[donki] wrote {len(data) if isinstance(data, list) else '?'} CMEs -> build/donki/cmes.json")
+    except Exception as e:
+        print(f"[donki] FAILED: {e}", file=sys.stderr)
+        errors.append(f"donki: {e}")
 
 
 if __name__ == "__main__":

@@ -371,6 +371,19 @@ function cacheGetAny(key) {
 }
 
 async function fetchCmes(qs) {
+  // Prefer the GitHub-Pages pre-baked file (fetched at deploy time with the
+  // real NASA_API_KEY) so visitors don't share the public DEMO_KEY bucket.
+  // The build widens the date window beyond what the browser asks for, so
+  // cmesOut's own filtering still trims to the requested window.
+  if (isStaticDeploy) {
+    try {
+      const r = await fetch("./donki/cmes.json", { cache: "no-store" });
+      if (r.ok) {
+        const data = await r.json();
+        return { data, from: "donki/cmes.json" };
+      }
+    } catch { /* fall through to live endpoint */ }
+  }
   // api.nasa.gov requires api_key on every request; DEMO_KEY is the public
   // throttled fallback. The --serve proxy swaps this for NASA_API_KEY when set
   // in env ([aurora_fi.py:202-208]), so this works on both static and --serve.
