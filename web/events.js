@@ -1,7 +1,7 @@
 // Renders the "Active events" card: recent SWPC alerts + DONKI CME arrivals.
 // One uniform row layout for alerts + CMEs so columns align.
 
-import { swpcAlerts, donkiCmes } from "./sources.js";
+import { swpcAlerts, donkiCmes, rtswSeries, cmeArrivalCheck } from "./sources.js";
 
 const utFmt = t => t.toISOString().slice(11, 16);
 const dayFmt = t => t.toISOString().slice(5, 10) + " " + utFmt(t);
@@ -60,18 +60,56 @@ function cmeImpact(c) {
   return ["info", "weak geomagnetic impact likely; Bz orientation sets outcome"];
 }
 
-function cmeRow(c, now) {
-  const [sev, impact] = cmeImpact(c);
-  const dot = SEVERITY_COLOR[sev];
+function arrivalStatus(c, check, now) {
   const rel = relHours(now, c.arrival);
+  if (!check || check.state === "pending") {
+    return { sev: null, right: `arrives in ${rel.replace("+", "")}`, line: null };
+  }
+  if (check.state === "observed") {
+    const s = check.shock;
+    return {
+      sev: "serious",
+      right: `arrived ${relHours(s.time, now).replace("-", "")} ago`,
+      line: `L1 shock at ${dayFmt(s.time)} UT — Δv +${Math.round(s.dv)} km/s, ΔBt +${s.dBt.toFixed(1)} nT (v ${Math.round(s.vBefore)}→${Math.round(s.vAfter)} km/s, Bt ${s.btBefore.toFixed(1)}→${s.btAfter.toFixed(1)} nT)`,
+    };
+  }
+  if (check.state === "waiting") {
+    return {
+      sev: null,
+      right: `due ±${check.hoursUntilClose.toFixed(1)} h`,
+      line: `inside arrival window — no shock signature at L1 yet`,
+    };
+  }
+  if (check.state === "missed") {
+    const vTxt = check.vNow != null ? `v=${Math.round(check.vNow)} km/s` : "v=?";
+    const btTxt = check.btNow != null ? `Bt=${check.btNow.toFixed(1)} nT` : "Bt=?";
+    return {
+      sev: "info",
+      right: `expected ${check.hoursSince.toFixed(1)} h ago`,
+      line: `no shock signature at L1 (${vTxt}, ${btTxt}) — likely missed Earth or still delayed`,
+    };
+  }
+  // nodata
   const past = c.arrival < now;
-  const whenTxt = past ? `arrived ${rel.replace("-", "")} ago` : `arrives in ${rel.replace("+", "")}`;
+  return {
+    sev: null,
+    right: past ? `arrived ${rel.replace("-", "")} ago` : `arrives in ${rel.replace("+", "")}`,
+    line: `L1 data unavailable — can't confirm arrival`,
+  };
+}
+
+function cmeRow(c, now, check) {
+  const [impSev, impact] = cmeImpact(c);
+  const st = arrivalStatus(c, check, now);
+  const sev = st.sev || impSev;
+  const dot = SEVERITY_COLOR[sev];
   const ar = c.ar ? ` · AR ${escapeHtml(String(c.ar))}` : "";
   const speed = c.speed ? `${Math.round(c.speed)} km/s` : "v=?";
   const uncertainty = c.nRuns > 1
     ? `${c.nRuns} Enlil runs`
     : "1 Enlil run (climatological ±)";
   const typeWord = CME_TYPE_WORD[c.type] || null;
+  const statusLine = st.line ? `<div class="ev-status">${escapeHtml(st.line)}</div>` : "";
   return `
     <div class="ev-row">
       <div class="ev-left">
@@ -82,9 +120,10 @@ function cmeRow(c, now) {
       <div class="ev-main">
         <div class="ev-headline">Earth-directed CME, arrival ${dayFmt(c.arrival)} UT ±${c.arrivalErrH.toFixed(0)} h</div>
         <div class="ev-desc">${typeWord ? `${typeWord} CME` : "CME"} — ${impact} · launched ${dayFmt(c.launch)} UT from ${escapeHtml(c.source)}${ar} · ${speed} · ${uncertainty}</div>
+        ${statusLine}
       </div>
       <div class="ev-right">
-        <div class="ev-time">${whenTxt}</div>
+        <div class="ev-time">${st.right}</div>
       </div>
     </div>`;
 }
@@ -105,6 +144,10 @@ function ensureStyle() {
     .ev-desc { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
     .ev-right { text-align: right; font-size: 12px; color: var(--text-secondary);
                 font-variant-numeric: tabular-nums; }
+    .ev-status { font-size: 12px; color: var(--text-primary); margin-top: 3px;
+                 padding: 2px 6px; background: var(--card-bg, rgba(255,255,255,0.03));
+                 border-left: 2px solid var(--border); border-radius: 2px;
+                 font-variant-numeric: tabular-nums; }
     .ev-sep { margin: 6px 0 2px; font-size: 12px; color: var(--text-muted);
               text-transform: uppercase; letter-spacing: 0.5px; }
     .ev-empty { padding: 8px 0; color: var(--text-secondary); font-size: 13px; }
@@ -116,7 +159,7 @@ function ensureStyle() {
   document.head.appendChild(s);
 }
 
-function renderEvents(card, body, alerts, cmes, errs) {
+function renderEvents(card, body, alerts, cmes, errs, series) {
   const now = new Date();
   if (!alerts.length && !cmes.length && !errs.length) {
     card.style.display = "none";
@@ -148,7 +191,10 @@ function renderEvents(card, body, alerts, cmes, errs) {
     if (src.cacheAgeMin != null) srcBits.push(`cached ${src.cacheAgeMin.toFixed(0)} min ago`);
     const srcTag = srcBits.length ? ` · ${srcBits.join(" · ")}` : "";
     parts.push(`<div class="ev-sep">DONKI — CMEs with predicted Earth arrival${srcTag}</div>`);
-    for (const c of cmes) parts.push(cmeRow(c, now));
+    for (const c of cmes) {
+      const check = cmeArrivalCheck(c, series, now);
+      parts.push(cmeRow(c, now, check));
+    }
   }
   if (errs.length) {
     parts.push(`<div class="errors" style="margin-top:8px">Events data problems:\n${errs.map(e => "• " + escapeHtml(e)).join("\n")}</div>`);
@@ -156,7 +202,7 @@ function renderEvents(card, body, alerts, cmes, errs) {
   body.innerHTML = parts.join("");
 }
 
-let _lastAlerts = [], _lastCmes = [], _lastErrs = [];
+let _lastAlerts = [], _lastCmes = [], _lastErrs = [], _lastSeries = null;
 
 async function loadAndRender() {
   const card = document.getElementById("events-card");
@@ -171,14 +217,16 @@ async function loadAndRender() {
   const onFresh = (freshCmes, err) => {
     if (err) { _lastErrs = _lastErrs.concat([`DONKI CMEs (background refresh): ${err.message}`]); }
     if (freshCmes) { _lastCmes = freshCmes; }
-    renderEvents(card, body, _lastAlerts, _lastCmes, _lastErrs);
+    renderEvents(card, body, _lastAlerts, _lastCmes, _lastErrs, _lastSeries);
   };
-  const [alerts, cmes] = await Promise.all([
+  const [alerts, cmes, series] = await Promise.all([
     safe(swpcAlerts(), "SWPC alerts"),
     safe(donkiCmes({ onFresh }), "DONKI CMEs"),
+    safe(rtswSeries(), "L1 series (CME arrival check)"),
   ]);
   _lastAlerts = alerts; _lastCmes = cmes; _lastErrs = errs;
-  renderEvents(card, body, alerts, cmes, errs);
+  _lastSeries = series && series.mag ? series : null;
+  renderEvents(card, body, alerts, cmes, errs, _lastSeries);
 }
 
 loadAndRender();

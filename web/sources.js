@@ -424,6 +424,99 @@ function cmesOut(data, source, now, windowBeforeH, windowAfterH) {
   return out.sort((a, b) => a.arrival - b.arrival);
 }
 
+// Raw RTSW time series for use by downstream detectors (e.g. CME arrival check).
+// Returns the full ~24 h that NOAA serves; both arrays are time-sorted ascending.
+//   mag:  [[t_ms, bt, bz], ...]
+//   wind: [[t_ms, v, n], ...]
+export async function rtswSeries() {
+  const [mag, wind] = await Promise.all([firstOf(URLS.mag), firstOf(URLS.wind)]);
+  const series = (rs, spec) => {
+    const out = [];
+    for (const r of activeRows(rows(rs))) {
+      let t; try { t = ptime(r.time_tag); } catch { continue; }
+      const vals = spec.map(k => num(r, ...k));
+      if (vals.every(v => v !== null)) out.push([+t, ...vals]);
+    }
+    return out.sort((a, b) => a[0] - b[0]);
+  };
+  return {
+    mag:  series(mag,  [["bt"], ["bz_gsm"]]),
+    wind: series(wind, [["proton_speed", "speed"], ["proton_density", "density"]]),
+  };
+}
+
+// Minimum per-side sample count to trust a median (avoids short-gap artefacts).
+const SHOCK_MIN_SAMPLES = 5;
+const SHOCK_WIN_MS = 30 * 60e3;
+// Thresholds tuned to catch clear ICME shock/sheath arrivals while rejecting
+// typical HSS onsets and quiet-wind noise. Both gates must trip simultaneously.
+const SHOCK_DV_KMS = 50;
+const SHOCK_DBT_NT = 3;
+
+// Scan [t0, t1] for a step where 30-min medians across a point rise by both
+// Δv ≥ SHOCK_DV_KMS and ΔBt ≥ SHOCK_DBT_NT. Returns the best candidate (max
+// Δv·ΔBt) or null. `mag` and `wind` as produced by rtswSeries().
+export function detectShock(mag, wind, t0, t1) {
+  const lo = +t0, hi = +t1;
+  const med = (pts, col) => {
+    if (pts.length < SHOCK_MIN_SAMPLES) return null;
+    const xs = pts.map(p => p[col]).sort((a, b) => a - b);
+    return xs[Math.floor(xs.length / 2)];
+  };
+  const window = (series, t, side) => {
+    const a = side < 0 ? t - SHOCK_WIN_MS : t;
+    const b = side < 0 ? t : t + SHOCK_WIN_MS;
+    return series.filter(p => p[0] >= a && p[0] <= b);
+  };
+  let best = null;
+  for (const row of mag) {
+    const t = row[0];
+    if (t < lo || t > hi) continue;
+    const vB = med(window(wind, t, -1), 1), vA = med(window(wind, t, +1), 1);
+    const bB = med(window(mag,  t, -1), 1), bA = med(window(mag,  t, +1), 1);
+    if (vB == null || vA == null || bB == null || bA == null) continue;
+    const dv = vA - vB, dBt = bA - bB;
+    if (dv < SHOCK_DV_KMS || dBt < SHOCK_DBT_NT) continue;
+    const score = dv * dBt;
+    if (!best || score > best.score) {
+      best = { time: new Date(t), dv, dBt, vBefore: vB, vAfter: vA, btBefore: bB, btAfter: bA, score };
+    }
+  }
+  return best;
+}
+
+// Classify a CME's current arrival status against live L1 data.
+//   state: "pending"  — arrival window hasn't opened yet
+//          "waiting"  — inside arrival ± errH, no shock seen yet
+//          "observed" — shock detected inside the window
+//          "missed"   — arrival + errH has passed with no shock
+//          "nodata"   — L1 series empty / doesn't cover the window
+export function cmeArrivalCheck(cme, series, now = new Date()) {
+  const halfMs = (cme.arrivalErrH || 0) * 3600e3;
+  const t0 = +cme.arrival - halfMs;
+  const t1 = +cme.arrival + halfMs;
+  const windowClosed = +now > t1;
+  if (+now < t0) return { state: "pending" };
+  if (!series || !series.mag.length || !series.wind.length) return { state: "nodata" };
+  const magLast = series.mag[series.mag.length - 1][0];
+  const windLast = series.wind[series.wind.length - 1][0];
+  const coverageEnd = Math.min(magLast, windLast);
+  // RTSW only reaches ~24 h; if the window closed before coverage began, we can't adjudicate.
+  const coverageStart = Math.max(series.mag[0][0], series.wind[0][0]);
+  if (t1 < coverageStart) return { state: "nodata" };
+  const scanEnd = Math.min(t1, +now, coverageEnd);
+  const shock = detectShock(series.mag, series.wind, t0, scanEnd);
+  if (shock) return { state: "observed", shock };
+  if (windowClosed) {
+    const recent = series.wind.slice(-30);
+    const btRecent = series.mag.slice(-30);
+    const vNow = recent.length ? recent[recent.length - 1][1] : null;
+    const btNow = btRecent.length ? btRecent[btRecent.length - 1][1] : null;
+    return { state: "missed", hoursSince: (+now - t1) / 3600e3, vNow, btNow };
+  }
+  return { state: "waiting", hoursUntilClose: (t1 - +now) / 3600e3 };
+}
+
 // Stale-while-revalidate: returns fresh cache immediately, or kicks off a
 // background fetch that resolves via onFresh() when done.
 export async function donkiCmes({ daysBack = 4, windowBeforeH = 12, windowAfterH = 72,
